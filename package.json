@@ -1,0 +1,27 @@
+{
+  "name": "fast-ftp",
+  "version": "1.0.6",
+  "description": "ftp tool",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "bin": {
+    "ff-config": "./bin/config-exec.js",
+    "ff-post": "./bin/post-exec.js"
+  },
+  "keywords": [
+    "ftp",
+    "sftp",
+    "fast"
+  ],
+  "author": "fanxingzeng",
+  "license": "ISC",
+  "dependencies": {
+    "colors": "^1.3.3",
+    "ftp": "^0.3.10",
+    "json-format": "^1.0.1",
+    "readline": "^1.3.0",
+    "ssh2-sftp-client": "^2.4.3"
+  }
+}
