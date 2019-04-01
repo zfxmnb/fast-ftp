@@ -5,177 +5,217 @@ var path = require('path');
 var colors = require('colors');
 var utils = require('./../utils');
 var root = utils.getCwd(); //根目录
-var config = utils.getJsonFile(path.join(utils.getCwd(), 'fast-ftp-config.json'), 1) || {} || {}; //配置
+var configs = utils.getJsonFile(path.join(utils.getCwd(), 'fast-ftp-config.json'), 1); //配置
+if (Object.prototype.toString.call(configs) !== '[object Array]') {
+    configs = [configs] || [];
+}
+
 //sftp
-if (config.type !== "ftp") {
-    var sftp = require('ssh2-sftp-client');
-    function cftp() {
-        this.ftp = new sftp();
-        //链接配置
-        this.ftpConfig = {
-            host: config.host,
-            port: config.port || '22',
-            username: config.username,
-            password: config.password
-        }
-    }
-    //连接
-    cftp.prototype.connectRemote = function (callback) {
-        console.log("## connect begin ## " + config.relpath);
-        this.ftp.connect(this.ftpConfig).then(function () {
-            console.log(("## start sftp success ## " + config.relpath).green);
-            callback && callback();
-        }).catch(function (err) {
-            console.log('## connect sftp close ##'.red);
-            console.log(err.red || err);
-            this.ftp.end();
-        }.bind(this));
-    }
+var sftp = require('ssh2-sftp-client');
 
-    //新增修改文件
-    cftp.prototype.putFile = function (f, callback) {
-        var fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
-        this.ftp.put(f, config.relpath + fileRelPath).then(function (data) {
-            console.log("## ".green + fileRelPath + " update -> success".green);
-            callback();
-        }).catch(function (err) {
-            console.log("-- ".red + fileRelPath + " update -> fail".red);
-            callback();
-        });
-    }
-
-    //移除文件
-    cftp.prototype.removeFile = function (f, callback) {
-        var fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
-        if (fs.statSync(f).isDirectory()) {
-            this.ftp.rmdir(config.relpath + fileRelPath, true).then(function (data) {
-                console.log("## ".green + fileRelPath + " rmdir -> success".green);
-                callback();
-            }).catch(function (err) {
-                console.log("-- ".red + fileRelPath + " rmdir -> fail".red);
-                callback();
-            });
-        } else {
-            this.ftp.delete(config.relpath + fileRelPath).then(function (data) {
-                console.log("## ".green + fileRelPath + " delete -> success".green);
-                callback();
-            }).catch(function (err) {
-                console.log("-- ".red + fileRelPath + " delete -> fail".red);
-                callback();
-            });
-        }
-    }
-
-    //新建目录
-    cftp.prototype.mkdirFile = function (f, callback) {
-        var fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
-        this.ftp.mkdir(config.relpath + fileRelPath, false).then(function (data) {
-            console.log("## ".green + fileRelPath + " mkdir -> success".green);
-            callback();
-        }).catch(function (err) {
-            callback();
-        });
-    }
-} else {
-    //ftp
-    var ftp = require('ftp'); // 引入 ftp 模块
-    function cftp() {
-        this.ftp = new ftp();
-        //链接配置
-        this.ftpConfig = {
-            host: config.host,
-            port: parseInt(config.port) || 21,
-            user: config.username,
-            password: config.password
-        }
-    }
-    //连接
-    cftp.prototype.connectRemote = function (callback) {
-        console.log("## connect begin ## " + config.relpath);
-        this.ftp.connect(this.ftpConfig);
-        this.ftp.on('error', function (err) {
-            console.log('connect ftp close'.red);
-            console.log(err.red || err);
-            this.ftp.end();
-        }.bind(this));
-        this.ftp.on('close', function () {});
-        this.ftp.on('end', function () {
-            console.log('connect ftp close'.red);
-        });
-        this.ftp.on('ready', function (err) {
-            console.log(("## start ftp success ## " + config.relpath).green);
-            callback && callback();
-        });
+function sftpClient(config) {
+    this.ftp = new sftp();
+    //链接配置
+    this.ftpConfig = {
+        host: config.host,
+        port: config.port || '22',
+        username: config.username,
+        password: config.password
     };
+    this.config = config;
+}
+//连接
+sftpClient.prototype.connectRemote = function (callback) {
+    var config = this.config;
+    console.log("## connect begin ## " + config.relpath);
+    this.ftp.connect(this.ftpConfig).then(function () {
+        console.log(("## start sftp success ## " + config.host + config.relpath).green);
+        callback && callback();
+    }).catch(function (err) {
+        console.log('## connect sftp close ##'.red);
+        console.log(err.red || err);
+        this.ftp.end();
+    }.bind(this));
+}
 
-    //新增修改文件
-    cftp.prototype.putFile = function (f, callback) {
-        var fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
-        this.ftp.put(f, config.relpath + fileRelPath, function (err) {
-            if (err) {
-                console.log("-- ".red + fileRelPath + " update -> fail".red);
-            } else {
-                console.log("## ".green + fileRelPath + " update -> success".green);
-            }
+//新增修改文件
+sftpClient.prototype.putFile = function (f, callback) {
+    var fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
+    this.ftp.put(f, this.config.relpath + fileRelPath).then(function (data) {
+        console.log("## ".green + fileRelPath + " update -> success".green);
+        callback();
+    }).catch(function (err) {
+        console.log("-- ".red + fileRelPath + " update -> fail".red);
+        callback();
+    });
+}
+
+//移除文件
+sftpClient.prototype.removeFile = function (f, callback) {
+    var fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
+    if (fs.statSync(f).isDirectory()) {
+        this.ftp.rmdir(this.config.relpath + fileRelPath, true).then(function (data) {
+            console.log("## ".green + fileRelPath + " rmdir -> success".green);
+            callback();
+        }).catch(function (err) {
+            console.log("-- ".red + fileRelPath + " rmdir -> fail".red);
+            callback();
+        });
+    } else {
+        this.ftp.delete(this.config.relpath + fileRelPath).then(function (data) {
+            console.log("## ".green + fileRelPath + " delete -> success".green);
+            callback();
+        }).catch(function (err) {
+            console.log("-- ".red + fileRelPath + " delete -> fail".red);
             callback();
         });
     }
+}
 
-    //移除文件
-    cftp.prototype.removeFile = function (f, callback) {
-        var fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
-        if (fs.statSync(f).isDirectory()) {
-            this.ftp.rmdir(config.relpath + fileRelPath, true, function (err) {
-                if (err) {
-                    console.log("-- ".red + fileRelPath + " delete -> fail".red);
-                } else {
-                    console.log("## ".green + fileRelPath + " delete -> success".green);
-                }
-                callback();
-            });
-        } else {
-            this.ftp.delete(config.relpath + fileRelPath, function (err) {
-                if (err) {
-                    console.log("-- ".red + fileRelPath + " delete -> fail".red);
-                } else {
-                    console.log("## ".green + fileRelPath + " delete -> success".green);
-                }
-                callback();
-            });
-        }
+//新建目录
+sftpClient.prototype.mkdirFile = function (f, callback, isBase) {
+    var fileRelPath, filePath;
+    if (isBase) {
+        fileRelPath = f;
+        filePath = f;
+    } else {
+        fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
+        filePath = this.config.relpath + fileRelPath;
     }
 
-    //新建目录
-    cftp.prototype.mkdirFile = function (f, callback) {
-        var fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
-        this.ftp.mkdir(config.relpath + fileRelPath, false, function (err) {
-            if (err) {} else {
-                console.log("## ".green + fileRelPath + " mkdir -> success".green);
-            }
-            callback();
-        });
-    }
+    this.ftp.mkdir(filePath, false).then(function (data) {
+        console.log("## ".green + fileRelPath + " mkdir -> success".green);
+        callback();
+    }).catch(function (err) {
+        callback();
+    });
+}
+//ftp
+var ftp = require('ftp'); // 引入 ftp 模块
+function ftpClient(config) {
+    this.ftp = new ftp();
+    //链接配置
+    this.ftpConfig = {
+        host: config.host,
+        port: parseInt(config.port) || 21,
+        user: config.username,
+        password: config.password
+    };
+    this.config = config
+}
+//连接
+ftpClient.prototype.connectRemote = function (callback) {
+    var config = this.config;
+    console.log("## connect begin ## " + config.relpath);
+    this.ftp.connect(this.ftpConfig);
+    this.ftp.on('error', function (err) {
+        console.log('connect ftp close'.red);
+        console.log(err.red || err);
+        this.ftp.end();
+    }.bind(this));
+    this.ftp.on('close', function () {});
+    this.ftp.on('end', function () {
+        console.log('connect ftp close'.red);
+    });
+    this.ftp.on('ready', function (err) {
+        console.log(("## start ftp success ## " + config.host + config.relpath).green);
+        callback && callback();
+    });
 };
+
+//新增修改文件
+ftpClient.prototype.putFile = function (f, callback) {
+    var fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
+    this.ftp.put(f, this.config.relpath + fileRelPath, function (err) {
+        if (err) {
+            console.log("-- ".red + fileRelPath + " update -> fail".red);
+        } else {
+            console.log("## ".green + fileRelPath + " update -> success".green);
+        }
+        callback();
+    });
+}
+
+//移除文件
+ftpClient.prototype.removeFile = function (f, callback) {
+    var fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
+    if (fs.statSync(f).isDirectory()) {
+        this.ftp.rmdir(this.config.relpath + fileRelPath, true, function (err) {
+            if (err) {
+                console.log("-- ".red + fileRelPath + " delete -> fail".red);
+            } else {
+                console.log("## ".green + fileRelPath + " delete -> success".green);
+            }
+            callback();
+        });
+    } else {
+        this.ftp.delete(this.config.relpath + fileRelPath, function (err) {
+            if (err) {
+                console.log("-- ".red + fileRelPath + " delete -> fail".red);
+            } else {
+                console.log("## ".green + fileRelPath + " delete -> success".green);
+            }
+            callback();
+        });
+    }
+}
+
+//新建目录
+ftpClient.prototype.mkdirFile = function (f, callback) {
+    var fileRelPath, filePath;
+    if (isBase) {
+        fileRelPath = f;
+        filePath = f;
+    } else {
+        fileRelPath = f.replace(root, '').replace(/\\/g, '\/');
+        filePath = this.config.relpath + fileRelPath;
+    }
+    this.ftp.mkdir(filePath, false, function (err) {
+        if (err) {} else {
+            console.log("## ".green + fileRelPath + " mkdir -> success".green);
+        }
+        callback();
+    });
+}
+
 
 /**
  * 往上尝试新建目录，防止父级目录不存在
- * @param {*} client
- * @param {*} filePath 
+ * @param {*} client ftp实例
+ * @param {*} filePath 文件路径
+ * @param {*} remotePath 远程基础目录
+ * @param {*} callback 回调
  */
-function makeRemoteDir(client, filePath, callback) {
-    var files = [];
-    while(path.dirname(filePath) != root){
+function makeRemoteDir(client, filePath, remotePath, callback) {
+    var files = [],
+        remoteFiles = [];
+    //远程基础路径
+    remoteFiles.unshift(remotePath);
+    while (path.dirname(remotePath) != '/') {
+        remotePath = path.dirname(remotePath);
+        remoteFiles.unshift(remotePath);
+    }
+    //本地文件路径
+    while (path.dirname(filePath) != root) {
         filePath = path.dirname(filePath);
         files.unshift(filePath);
     }
-    files.unshift(filePath);
-    mkdir(files);
-    function mkdir(files){
-        if(files.length){
-            client.mkdirFile(files.shift(), function(){
-                mkdir(files)
-            })
-        }else{
+    if (fs.statSync(filePath).isDirectory()) {
+        files.unshift(filePath);
+    }
+    //构建远程目录
+    mkdir(remoteFiles, true, function () {
+        mkdir(files, false, function () {
+            callback && callback();
+        });
+    });
+
+    function mkdir(files, isBase, callback) {
+        if (files.length) {
+            client.mkdirFile(files.shift(), function () {
+                mkdir(files, isBase, callback)
+            }, isBase)
+        } else {
             callback && callback();
         }
     }
@@ -219,29 +259,47 @@ function upload(client, dirPath, callback) {
  * @param {*} force 上传时是否强制删除
  */
 function start(filePath, relpath, force, callback) {
+    var config = configs.shift();
+    if (typeof config !== 'object') {
+        if (configs.length > 0) {
+            start(filePath, relpath, force, callback);
+        } else {
+            console.log("## upload  complated ##".green);
+            callback && callback();
+        }
+        return
+    }
     config.relpath = relpath || config.relpath;
     if (filePath != root && config.host && config.username && config.password && config.relpath) {
-        var client = new cftp();
+        var client = config.type === 'ftp' ? new ftpClient(config) : new sftpClient(config);
         client.connectRemote(function () {
-            if(fs.existsSync(filePath)){
-                makeRemoteDir(client, filePath, function () {
+            if (fs.existsSync(filePath)) {
+                makeRemoteDir(client, filePath, config.relpath, function () {
                     if (force) {
                         client.removeFile(filePath, function () {
                             upload(client, filePath, function () {
-                                console.log("## upload  complated ##".green);
                                 client.ftp.end && client.ftp.end();
-                                callback && callback();
+                                if (configs.length > 0) {
+                                    start(filePath, relpath, force, callback);
+                                } else {
+                                    console.log("## upload  complated ##".green);
+                                    callback && callback();
+                                }
                             });
                         })
                     } else {
                         upload(client, filePath, function () {
-                            console.log("## upload  complated ##".green);
                             client.ftp.end && client.ftp.end();
-                            callback && callback();
+                            if (configs.length > 0) {
+                                start(filePath, relpath, force, callback);
+                            } else {
+                                console.log("## upload  complated ##".green);
+                                callback && callback();
+                            }
                         });
                     }
                 })
-            }else{
+            } else {
                 console.log("## file is not exists ##".red);
                 client.ftp.end && client.ftp.end();
             }

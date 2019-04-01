@@ -60,7 +60,7 @@ function start() {
         inputConfig.forEach(function (item) {
             config[item.key] = item.value;
         });
-        utils.makeFile(configsPath, utils.jsonFormat(config))
+        utils.makeFile(configsPath, utils.jsonFormat([config]))
     })
 }
 
