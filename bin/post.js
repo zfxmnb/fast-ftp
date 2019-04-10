@@ -4,15 +4,18 @@ var fs = require('fs');
 var path = require('path');
 var colors = require('colors');
 var utils = require('./../utils');
-var root = utils.getCwd(); //根目录
+//根目录
+var root = utils.getCwd();
+//配置
 var configs = utils.getJsonFile(path.join(utils.getCwd(), 'fast-ftp-config.json'), 1); //配置
 if (Object.prototype.toString.call(configs) !== '[object Array]') {
     configs = [configs] || [];
 }
+//执行配置用于多配置模式
+var currConfigs = [];
 
 //sftp
 var sftp = require('ssh2-sftp-client');
-
 function sftpClient(config) {
     this.ftp = new sftp();
     //链接配置
@@ -90,6 +93,7 @@ sftpClient.prototype.mkdirFile = function (f, callback, isBase) {
         callback();
     });
 }
+
 //ftp
 var ftp = require('ftp'); // 引入 ftp 模块
 function ftpClient(config) {
@@ -203,13 +207,14 @@ function makeRemoteDir(client, filePath, remotePath, callback) {
     if (fs.statSync(filePath).isDirectory()) {
         files.unshift(filePath);
     }
-    //构建远程目录
+    //构建远程相对路径父级目录
     mkdir(remoteFiles, true, function () {
+        //构建远程文件父级目录
         mkdir(files, false, function () {
             callback && callback();
         });
     });
-
+    //构建远程目录
     function mkdir(files, isBase, callback) {
         if (files.length) {
             client.mkdirFile(files.shift(), function () {
@@ -229,11 +234,14 @@ function makeRemoteDir(client, filePath, remotePath, callback) {
  */
 function upload(client, dirPath, callback) {
     if (fs.statSync(dirPath).isDirectory()) {
+        //生成文件夹
         client.mkdirFile(dirPath, function () {
+            //遍历文件夹下文件
             var files = fs.readdirSync(dirPath);
             if (files.length) {
                 var pass = 0;
                 files.forEach(function (file) {
+                    //递归上传子文件
                     upload(client, path.join(dirPath, file), function () {
                         pass++;
                         if (pass == files.length) {
@@ -246,6 +254,7 @@ function upload(client, dirPath, callback) {
             }
         });
     } else {
+        //上传文件
         client.putFile(dirPath, function () {
             callback && callback();
         })
@@ -259,9 +268,10 @@ function upload(client, dirPath, callback) {
  * @param {*} force 上传时是否强制删除
  */
 function start(filePath, relpath, force, callback) {
-    var config = configs.shift();
+    //配置判断
+    var config = currConfigs.shift();
     if (typeof config !== 'object') {
-        if (configs.length > 0) {
+        if (currConfigs.length > 0) {
             start(filePath, relpath, force, callback);
         } else {
             console.log("## upload  complated ##".green);
@@ -269,17 +279,26 @@ function start(filePath, relpath, force, callback) {
         }
         return
     }
+    //命令模式可写入远程相对路径
     config.relpath = relpath || config.relpath;
+    //配置正确进入上传状态
     if (filePath != root && config.host && config.username && config.password && config.relpath) {
+        //选择ftp|sftp模块
         var client = config.type === 'ftp' ? new ftpClient(config) : new sftpClient(config);
+        //链接远程服务器
         client.connectRemote(function () {
+            //判断本地文件存在
             if (fs.existsSync(filePath)) {
+                //构建远程目录，防止因为父级目录不存在上传失败问题
                 makeRemoteDir(client, filePath, config.relpath, function () {
+                    //是否强制覆盖上传
                     if (force) {
                         client.removeFile(filePath, function () {
                             upload(client, filePath, function () {
+                                //上传结束
                                 client.ftp.end && client.ftp.end();
-                                if (configs.length > 0) {
+                                //判断是否多上传
+                                if (currConfigs.length > 0) {
                                     start(filePath, relpath, force, callback);
                                 } else {
                                     console.log("## upload  complated ##".green);
@@ -289,8 +308,10 @@ function start(filePath, relpath, force, callback) {
                         })
                     } else {
                         upload(client, filePath, function () {
+                            //上传结束
                             client.ftp.end && client.ftp.end();
-                            if (configs.length > 0) {
+                            //判断是否多上传
+                            if (currConfigs.length > 0) {
                                 start(filePath, relpath, force, callback);
                             } else {
                                 console.log("## upload  complated ##".green);
@@ -309,4 +330,10 @@ function start(filePath, relpath, force, callback) {
     }
 }
 
-module.exports = start
+module.exports = function (filePath, relpath, force, callback) {
+    //浅拷贝配置文件，用于多配置、多次上传
+    configs.forEach(function (item) {
+        currConfigs.push(item);
+    });
+    start(filePath, relpath, force, callback);
+}
