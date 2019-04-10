@@ -234,7 +234,7 @@ function upload(client, dirPath, callback) {
             if (files.length) {
                 var pass = 0;
                 files.forEach(function (file) {
-                    upload(client, dirPath + "\\" + file, function () {
+                    upload(client, path.join(dirPath, file), function () {
                         pass++;
                         if (pass == files.length) {
                             callback && callback();
